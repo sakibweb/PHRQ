@@ -771,36 +771,72 @@ JS;
         header('Content-Length: '.$length);
     }
 
-    public static function livemap($url = '/livemap') {
-        $liveData = PHRO::footprint();
-        if (strpos($liveData['REQUEST_URI'], $url) === false) {
-            $footprint = PHRO::footprint();
+    /**
+     * Handle live map data collection and processing based on the request.
+     *
+     * This method collects footprint data from the current request and processes it,
+     * unless the request matches an entry in the skip list. It limits the number of 
+     * entries stored for the 'livemap' data type.
+     *
+     * @param string $url The URL endpoint for the live map (default is '/livemap').
+     * @param array $skipList An associative array mapping request methods to URLs, that should be skipped from processing.
+     */
+    public static function livemap($url = '/livemap', $skipList = []) {
+        $footprint = PHRO::footprint();
+        $skip = false;
+        
+        $rootUrl = parse_url(PHRO::root())['path'];
+        $nowURL = str_replace($rootUrl, '', $footprint['REQUEST_URI']);
+        
+        foreach ($skipList as $method => $skipUrl) {
+            $slashCount = substr_count($skipUrl, '/');
+            $skipUrlTrimmed = str_replace($rootUrl, '', $skipUrl);
+        
+            if (strtoupper($footprint['REQUEST_METHOD']) === strtoupper($method) && preg_match("~$skipUrlTrimmed~", $nowURL)) {
+                $skip = true;
+                break;
+            }
+        }
+        
+        if ($skip === false) {
             $data = [
-                'private' => $footprint['private'],
-                'public' => $footprint['public'],
-                'latitude' => $footprint['latitude'],
-                'longitude' => $footprint['longitude'],
-                'country' => $footprint['country'],
-                'city' => $footprint['city'],
-                'country' => $footprint['country'],
-                'countryCode' => $footprint['countryCode'],
-                'timezone' => $footprint['timezone'],
-                'isp' => $footprint['isp'],
-                'is_mobile' => $footprint['is_mobile'],
-                'is_desktop' => $footprint['is_desktop'],
-                'proxy' => $footprint['proxy'],
-                'platform' => $footprint['platform'],
-                'browser' => $footprint['browser'],
-                'browser_version' => $footprint['browser_version'],
-                'host' => $footprint['HTTP_HOST'],
-                'requestURL' => $footprint['REQUEST_URI'],
+                'hostPrivateIP' => $footprint['hostPrivateIP'],
+                'hostPublicIP' => $footprint['hostPublicIP'],
+                'hostLatitude' => $footprint['hostLatitude'],
+                'hostLongitude' => $footprint['hostLongitude'],
+                'hostCountryCode' => $footprint['hostCountryCode'],
+                'hostCountry' => $footprint['hostCountry'],
+                'hostCity' => $footprint['hostCity'],
+                'hostArea' => $footprint['hostArea'],
+                'hostIsp' => $footprint['hostIsp'],
+                'hostOrg' => $footprint['hostOrg'],
+                'hostAs' => $footprint['hostAs'],
+                'hostVpn' => $footprint['hostVpn'],
+                'clientPlatform' => $footprint['clientPlatform'],
+                'clientBrowser' => $footprint['clientBrowser'],
+                'clientPrivateIP' => $footprint['clientPrivateIP'],
+                'clientPublicIP' => $footprint['clientPublicIP'],
+                'clientLat' => $footprint['clientLat'],
+                'clientLon' => $footprint['clientLon'],
+                'clientCountryCode' => $footprint['clientCountryCode'],
+                'clientCountry' => $footprint['clientCountry'],
+                'clientCity' => $footprint['clientCity'],
+                'clientArea' => $footprint['clientArea'],
+                'clientIsp' => $footprint['clientIsp'],
+                'clientVpn' => $footprint['clientVpn'],
                 'requestMETHOD' => $footprint['REQUEST_METHOD'],
-                'requestTIME' => $footprint['REQUEST_TIME'],
-                'requestFLOAT' => $footprint['REQUEST_TIME_FLOAT'],
+                'requestURL' => $footprint['REQUEST_URI'],
+                'clientDeviceId' => $footprint['clientDeviceId'],
+                'clientFingerprintId' => $footprint['clientFingerprintId'],
+                'clientFingerprint' => $footprint['clientFingerprint'],
                 'netkey' => $footprint['netkey'],
-                'devicekey' => $footprint['devicekey']
+                'devicekey' => $footprint['devicekey'],
+                'requestTime' => (int)$footprint['REQUEST_TIME'],
+                'requestFLOAT' => $footprint['REQUEST_TIME_FLOAT'],
+                'datetime' => date("Y-m-d H:i:s", (int)$footprint['REQUEST_TIME_FLOAT'])
             ];
-            PHLS::limitizer('livemap', $data, 10, 60*24);
+    
+            PHLS::limitizer('livemap', $data, 10, 60 * 24);
         }
 
         PHRO::get($url, function() {
@@ -808,11 +844,10 @@ JS;
                 print <<<EOT
                 <!DOCTYPE html>
                 <html lang="en">
-
                 <head>
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Tratraffic Map</title>
+                    <title>🟢Tratraffic Map (PHRQ)</title>
                     <meta name="icon" content="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABIAAAASCAMAAABhEH5lAAAB3VBMVEVHcEydiSEAAAChNxsbCQSQfR9HGwi+RCELBALApykQEAepOh2xPR6wmCVVMw7cTiWGdB14KhUAAABkWBd5aRu+QiDVSSPPtCqUMxrGRSG5QB+GfEaJMBg+NQZ/KhOtn02okiTWUi2YNhvAQiC+QyLAmildURVfEADWh3G9fG1pXBjEqihNRBOELxikORyKbR29pCcuKQ2QPxrrWCjxZirx0ij63R/jUSZ/jKv94B44PWPpaiqircLoVCbuZChgao7vYSnuzymUnbjqei/Iw4OPl5/glCOWp8bzthitv9nsxCn11yXE0t+KmbyOm7OHjaNzf6Lk6vLatyayvNLxbzrByNN3gqakuNjlxyy1rZJbZo+5qDjobjrpyizfwiyanLGWiJWGfFm9jDd6a2rddR/dvx2UbVL340Oqm3y2eCbtzSBue53akx311xZ+h56bizvx1i6/p3fzpS7qqhq5vszshi5OV4GhmaW0oYW2sr7Fj331glGbrc3xbDLKaENpc5jGmIzSn5bbhmXQ3OmqUkKur76Hb32zblc/RWx6em5UWn3jyivpyyvUwU1teJu/dV3JwHXCw7jcdU3rzxuQkorb0Hnx1B6wq3RgZ4DErC5tcoDgtCrLZTmAd0vjXybI0qtxAAAAM3RSTlMAtQJvD50l1wjYFYKX2j7+jVcBb3zc+PpY8KzqRjA188Twh73N11Ea59tk90p1r6zjM6B1d64/AAABMUlEQVQY02MQUhJlBwNVTjBg5WBg4DE3BgFrL1MQiGUECnGbm5g4O1uXBnl7ZVmaxbIyMTAwA4Wsc9w8it0yUy3NIgQYGBgk+B1CqotyvT1SktItzeJEgEIyYiEN5RWFkRlpya4uBUFaQCE5xUY/e/8S/zwLK3t3F3E1oBCbRqBNgFNoqE22VYCnjzwfUEhdM96iJswn0LPMyt3XT1oWKMSi0tIaXt8c7BvVEe6az8sGFOJQNq5rCwu26Yvq6ox25OUCCjFJ2dY2VSY42U+Z2GtmqsACFGLgsY2pau93mhE9dUK3I8g/IB/Z2dlNip8VOX2yWQ/IPyAfOZiYxCRYWCROg/gH6CNJfltjhzmJc2c6xmkLg4U4+HT1RMXmzRY3YBTR4WKAAg42QSN9YUOwbQwA5ztHGpIVCvUAAAAASUVORK5CYII=">
                     <meta name="description" content="PHKing Dev | PHP Framework">
                     <meta name="author" content="sakibweb">
@@ -820,43 +855,65 @@ JS;
 
                     <style>
                         body {
-                        margin: 0;
-                        overflow: hidden;
-                        background-color: black;
-                        display: flex;
-                        flex-direction: column;
-                        align-items: center; /* Center the contents */
-                        height: 100vh; /* Use full viewport height */
+                            margin: 0;
+                            overflow: hidden;
+                            background-color: black;
+                            display: flex;
+                            flex-direction: column;
+                            align-items: center;
+                            /* Center the contents */
+                            height: 100vh;
+                            /* Use full viewport height */
                         }
+
                         #map {
-                        position: relative;
-                        top: 0;
-                        left: 0;
-                        width: 100%;
-                        height: 100%;
+                            position: relative;
+                            top: 0;
+                            left: 0;
+                            width: 100%;
+                            height: 100%;
                         }
-                        .header, .footer {
-                        position: absolute;
-                        width: calc(60% - 60px); /* Keep this at 60% */
-                        background: rgba(255, 255, 255, 0.02);
-                        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
-                        backdrop-filter: blur(2px);
-                        -webkit-backdrop-filter: blur(2px);
-                        color: white;
-                        text-align: center;
-                        padding: 10px;
-                        z-index: 2; /* Ensure the header is on top */
-                        }
-                        .header {
-                        top: 0px; /* Set some space from the top */
-                        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-                        }
+
+                        .header,
                         .footer {
-                        bottom: 0px; /* Set some space from the bottom */
-                        display: flex;
-                        justify-content: center;
-                        border-top: 1px solid rgba(255, 255, 255, 0.2);
+                            position: absolute;
+                            width: calc(60% - 60px);
+                            /* Keep this at 60% */
+                            background: rgba(255, 255, 255, 0.02);
+                            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+                            backdrop-filter: blur(2px);
+                            -webkit-backdrop-filter: blur(2px);
+                            color: white;
+                            text-align: center;
+                            padding: 10px;
+                            z-index: 2;
+                            /* Ensure the header is on top */
                         }
+
+                        .header {
+                            top: 0px;
+                            /* Set some space from the top */
+                            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+                            color: white;
+                            text-decoration: none;
+                            font-weight: bold;
+                            font-size: 18px;
+                        }
+                        .header a {
+                            color: white;
+                            text-decoration: none;
+                            font-weight: bold;
+                            font-size: 13px;
+                        }
+
+                        .footer {
+                            bottom: 0px;
+                            /* Set some space from the bottom */
+                            display: flex;
+                            justify-content: center;
+                            border-top: 1px solid rgba(255, 255, 255, 0.2);
+                        }
+
                         .color-palette {
                             width: auto;
                             display: flex;
@@ -866,100 +923,126 @@ JS;
                             flex-wrap: nowrap;
                             flex-direction: row;
                         }
+
                         .color-palette-item {
                             width: 20px;
                             height: 20px;
                             border-right: 1px solid rgba(255, 255, 255, 0.2);
                             border-radius: 5px;
                         }
+
                         .color-palette a {
                             padding-left: 5px;
                             padding-right: 8px;
                         }
+
                         .sidebar {
-                        position: absolute;
-                        left: 0;
-                        /* top: 38px; Below the header */
-                        width: 20%;
-                        height: calc(100% - 100px); /* Full height minus header and footer */
-                        background: rgba(255, 255, 255, 0.02);
-                        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
-                        backdrop-filter: blur(2px);
-                        -webkit-backdrop-filter: blur(2px);
-                        border-right: 1px solid rgba(255, 255, 255, 0.2);
-                        color: white;
-                        overflow-y: auto; /* Allow scrolling */
-                        z-index: 2; /* Ensure the sidebar is on top */
-                        padding: 10px;
-                        margin-top: 40px;
-                        margin-bottom: 40px;
+                            position: absolute;
+                            left: 0;
+                            width: 20%;
+                            height: calc(100% - 100px);
+                            background: rgba(255, 255, 255, 0.02);
+                            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+                            backdrop-filter: blur(2px);
+                            -webkit-backdrop-filter: blur(2px);
+                            border-right: 1px solid rgba(255, 255, 255, 0.2);
+                            color: white;
+                            overflow-y: auto; /* Allow scrolling */
+                            z-index: 2; /* Ensure the sidebar is on top */
+                            padding: 10px;
+                            margin-top: 41px;
+                            margin-bottom: 40px;
+
+                            /* Scrollbar styling for modern browsers */
+                            scrollbar-width: thin; /* Sets scrollbar width (options: auto, thin, none) */
+                            scrollbar-color: #484848bd #ffffff14; /* Thumb color #888, Track color #333 */
+                            scroll-margin-right: 5px;
                         }
+
                         .details {
-                        position: absolute;
-                        /* top: 50px; Below the header */
-                        right: 0;
-                        width: 20%;
-                        height: calc(100% - 100px); /* Full height minus header and footer */
-                        background: rgba(255, 255, 255, 0.02);
-                        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
-                        backdrop-filter: blur(2px);
-                        -webkit-backdrop-filter: blur(2px);
-                        border-left: 1px solid rgba(255, 255, 255, 0.2);
-                        color: white;
-                        overflow-y: auto; /* Allow scrolling */
-                        z-index: 2; /* Ensure the details section is on top */
-                        padding: 10px;
-                        margin-top: 40px;
-                        margin-bottom: 40px;
+                            position: absolute;
+                            /* top: 50px; Below the header */
+                            right: 0;
+                            width: 20%;
+                            height: calc(100% - 100px);
+                            /* Full height minus header and footer */
+                            background: rgba(255, 255, 255, 0.02);
+                            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+                            backdrop-filter: blur(2px);
+                            -webkit-backdrop-filter: blur(2px);
+                            border-left: 1px solid rgba(255, 255, 255, 0.2);
+                            color: white;
+                            overflow-y: auto;
+                            /* Allow scrolling */
+                            z-index: 2;
+                            /* Ensure the details section is on top */
+                            padding: 10px;
+                            margin-top: 41px;
+                            margin-bottom: 40px;
+                            /* Scrollbar styling for modern browsers */
+                            scrollbar-width: thin; /* Sets scrollbar width (options: auto, thin, none) */
+                            scrollbar-color: #484848bd #ffffff14; /* Thumb color #888, Track color #333 */
+                            scroll-margin-right: 5px;
                         }
+
                         .tooltip {
-                        position: absolute;
-                        background: rgba(255, 255, 255, 0.02);
-                        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
-                        backdrop-filter: blur(2px);
-                        -webkit-backdrop-filter: blur(2px);
-                        border: 1px solid rgba(255, 255, 255, 0.2);
-                        color: white;
-                        padding: 5px;
-                        border-radius: 5px;
-                        display: none; /* Hidden by default */
-                        z-index: 3; /* Above everything else */
+                            position: absolute;
+                            background: rgba(255, 255, 255, 0.02);
+                            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+                            backdrop-filter: blur(2px);
+                            -webkit-backdrop-filter: blur(2px);
+                            border: 1px solid rgba(255, 255, 255, 0.2);
+                            color: white;
+                            padding: 5px;
+                            border-radius: 5px;
+                            display: none;
+                            /* Hidden by default */
+                            z-index: 3;
+                            /* Above everything else */
                         }
-                    
+
                         .attack-card {
-                        background: rgba(255, 255, 255, 0.05);
-                        border-radius: 8px;
-                        padding: 10px;
-                        margin-bottom: 10px;
-                        color: white;
-                        display: flex;
-                        flex-direction: column;
-                        border: 1px solid rgba(255, 255, 255, 0.2);
+                            background: rgba(255, 255, 255, 0.05);
+                            border-radius: 8px;
+                            padding: 10px;
+                            margin-bottom: 10px;
+                            color: white;
+                            display: flex;
+                            flex-direction: column;
+                            border: 1px solid rgba(255, 255, 255, 0.2);
+                            cursor: pointer; /* Change cursor to pointer */
                         }
-                        .attack-header, .attack-footer {
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
+
+                        .attack-header,
+                        .attack-footer {
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
                         }
+
                         .attack-country img {
-                        width: 20px;
-                        margin-right: 5px;
+                            width: 20px;
+                            margin-right: 5px;
                         }
+
                         .attack-type {
-                        background-color: #FF4500;
-                        padding: 5px 10px;
-                        border-radius: 12px;
-                        color: white;
-                        font-size: 12px;
-                        text-transform: uppercase;
+                            background-color: #FF6347;
+                            padding: 5px 10px;
+                            border-radius: 12px;
+                            color: white;
+                            font-size: 12px;
+                            text-transform: uppercase;
                         }
+
                         .attack-footer img {
-                        width: 20px;
-                        margin-right: 5px;
+                            width: 20px;
+                            margin-right: 5px;
                         }
+
                         #attack-list {
                             padding-left: 0px;
                         }
+
                         .attack-body {
                             font-size: 14px;
                             margin-top: 8px;
@@ -973,265 +1056,960 @@ JS;
                             justify-content: space-between;
                             align-content: space-between;
                         }
+
+                        #details-content {
+                            font-size: 16px;
+                        }
+                        
+                        #details-content strong, br {
+                            font-weight: bold;
+                            margin-top: 8px;
+                            margin-bottom: 8px;
+                            padding-top: 8px;
+                            padding-bottom: 8px;
+                        }
+
+                        button {
+                            background: rgba(255, 255, 255, 0.05);
+                            border-radius: 8px;
+                            padding: 10px;
+                            margin-top: 10px;
+                            color: white;
+                            display: flex;
+                            flex-direction: column;
+                            border: 1px solid rgba(255, 255, 255, 0.2);
+                            cursor: pointer; /* Change cursor to pointer */
+                        }
+
+                        /* Modal Styles */
+                        .modal {
+                            display: none; /* Hidden by default */
+                            position: fixed; 
+                            z-index: 1000; 
+                            left: 0;
+                            top: 0;
+                            width: 100%; 
+                            height: 100%; 
+                            background-color: rgba(0,0,0,0.4); /* Black background with opacity */
+                        }
+
+                        /* Modal Content */
+                        .modal-content {
+                            position: absolute;
+                            top: 50%;
+                            left: 50%;
+                            transform: translate(-50%, -50%);
+                            background-color: #0000006b;
+                            color: white;
+                            padding: 20px;
+                            border: 1px solid #888;
+                            border-radius: 8px;
+                            width: 300px;
+                            box-shadow: 0px 0px 10px #000;
+                        }
+
+                        .modal-content h2 {
+                            display: block;
+                            font-size: 1.5em;
+                            margin-inline-start: 0px;
+                            margin-inline-end: 0px;
+                            font-weight: bold;
+                            unicode-bidi: isolate;
+                        }
+
+                        .close-btn {
+                            float: right;
+                            font-size: 28px;
+                            cursor: pointer;
+                        }
+
+                        #settingsForm div {
+                            display: flex;
+                            flex-wrap: nowrap;
+                            align-content: center;
+                            justify-content: space-between;
+                            align-items: center;
+                            flex-direction: row;
+                            margin-top: 5px;
+                            margin-bottom: 5px;
+                        }
+
+                        #settingsForm select, #settingsForm input {
+                            background-color: #0000006b;
+                            color: white;
+                            border: 1.5px solid white;
+                            border-radius: 5px;
+                            /* padding: 1px; */
+                            padding-top: 1px;
+                            padding-bottom: 1px;
+                            padding-left: 5px;
+                            padding-right: 5px;
+                            margin: 2px 0;
+                        }
+
                     </style>
                     <script src="//unpkg.com/globe.gl"></script>
+                    <script>
+                        // List of replacements for unwanted characters
+                        const replacements = {
+                            '+': '--',
+                            '/': '__',
+                            '=': '..',
+                            '\'': '~~',
+                            '"': '!!',
+                            '`': '||',
+                            "'": '**',
+                            ' ': '%%',
+                        };
+
+                        // Reverse mapping for decoding
+                        const reverseReplacements = Object.fromEntries(Object.entries(replacements).map(([key, value]) => [value, key]));
+
+                        /**
+                         * Compress and encode an object to a safe base64-like format.
+                         * @param {Object} obj - The input object to be encoded.
+                         * @returns {String} - Encoded and safe base64 string.
+                         */
+                        function encodeObjectToBase64(obj) {
+                            // Step 1: Convert the object to JSON string
+                            const jsonString = JSON.stringify(obj);
+
+                            // Step 2: Convert JSON string to Base64 (compressed using btoa)
+                            let base64 = btoa(jsonString);
+
+                            // Step 3: Replace unwanted characters using replacements map
+                            Object.keys(replacements).forEach(char => {
+                                base64 = base64.split(char).join(replacements[char]);
+                            });
+
+                            return base64;
+                        }
+
+                        /**
+                         * Decode and decompress a safe base64-like format back to an object.
+                         * @param {String} base64String - The encoded string.
+                         * @returns {Object} - Decoded object.
+                         */
+                        function decodeBase64ToObject(base64String) {
+                            // Step 1: Replace safe characters back to original base64 characters
+                            Object.keys(reverseReplacements).forEach(replacement => {
+                                base64String = base64String.split(replacement).join(reverseReplacements[replacement]);
+                            });
+
+                            // Step 2: Decode the Base64 string to a JSON string
+                            const jsonString = atob(base64String);
+
+                            // Step 3: Parse the JSON string to an object and return
+                            return JSON.parse(jsonString);
+                        }
+
+                    </script>
                 </head>
 
                 <body>
-                    <div class="header">Cyber Threat Live Map</div>
+                    <div class="header"><a href="https://github.com/sakibweb" target="_blank">🟢Tratraffic Map (PHRQ)</a><a id="gset" style="cursor: pointer; margin-left: 5px;">⚙️Settings</a></div>
                     <div id="map"></div>
                     <div class="sidebar" id="live-attacks">
-                        <h3>Live Attacks</h3>
+                        <h3>Live Request</h3>
                         <ul id="attack-list"></ul>
                     </div>
                     <div class="details" id="attack-details">
-                        <h3>Attack Details</h3>
-                        <p id="details-content">Select an attack to view details.</p>
+                        <h3>Request Details</h3>
+                        <p id="details-content">Select a request to view details.</p>
                     </div>
                     <div class="footer">
                         <div class="color-palette" id="color-palette">
-                            <div class="color-palette-item" style="background-color: #FF4500;"></div><a>Attack Type 1</a>
-                            <div class="color-palette-item" style="background-color: #00FFFF;"></div><a>Attack Type 2</a>
-                            <div class="color-palette-item" style="background-color: #FFD700;"></div><a>Attack Type 3</a>
+                        <div class="color-palette-item" style="background-color: #FF1493;"></div><a>GET</a>
+                        <div class="color-palette-item" style="background-color: #0125d5;"></div><a>POST</a>
+                        <div class="color-palette-item" style="background-color: #1eb621;"></div><a>PUT</a>
+                        <div class="color-palette-item" style="background-color: #c4c420;"></div><a>PATCH</a>
+                        <div class="color-palette-item" style="background-color: #ba0000;"></div><a>DELETE</a>
+                        <div class="color-palette-item" style="background-color: #8A2BE2;"></div><a>HEAD</a>
+                        <div class="color-palette-item" style="background-color: #21a9b7;"></div><a>OPTIONS</a>
+                        <div class="color-palette-item" style="background-color: #FF6347;"></div><a>CUSTOM</a>
+                        <svg viewBox="-4 0 36 36" height="20" width="20" style="fill: #4682B4;"> <path d="M14,0 C21.732,0 28,5.641 28,12.6 C28,23.963 14,36 14,36 C14,36 0,24.064 0,12.6 C0,5.641 6.268,0 14,0 Z"></path><circle fill="black" cx="14" cy="14" r="7"></circle></svg><a>HOST</a>
+                        <svg viewBox="-4 0 36 36" height="20" width="20" style="fill: #FF4500;"> <path d="M14,0 C21.732,0 28,5.641 28,12.6 C28,23.963 14,36 14,36 C14,36 0,24.064 0,12.6 C0,5.641 6.268,0 14,0 Z"></path><circle fill="black" cx="14" cy="14" r="7"></circle></svg><a>CLIENT</a>
+                        </div>
+                    </div>
+                    <!-- Popup Modal Structure -->
+                    <div id="settingsModal" class="modal">
+                        <div class="modal-content">
+                            <div style="display: flex; flex-wrap: nowrap; justify-content: space-between; align-content: center; align-items: center; flex-direction: row-reverse; max-height: 30px; margin-bottom: 20px;">
+                                <span class="close-btn">&times;</span>
+                                <h2>Settings</h2>
+                            </div>
+
+                            <!-- Settings Options -->
+                            <form id="settingsForm">
+                                <div>
+                                    <label>Animation Mode:</label>
+                                    <select id="animationMode">
+                                        <option value="true" selected>On</option>
+                                        <option value="false">Off</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label>Animation Speed:</label>
+                                    <input type="number" id="animationSpeed" min="0.1" max="5" step="0.1" value="0.5">
+                                </div>
+
+                                <div>
+                                    <label>Landmark:</label>
+                                    <select id="landmark">
+                                        <option value="true" selected>Show</option>
+                                        <option value="false">Hide</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label>Focus Mode:</label>
+                                    <select id="focusMode">
+                                        <option value="true" selected>On</option>
+                                        <option value="false">Off</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label>Ground:</label>
+                                    <select id="ground">
+                                        <option value="true" selected>Show</option>
+                                        <option value="false">Hide</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label>Country:</label>
+                                    <select id="country">
+                                        <option value="true" selected>Show</option>
+                                        <option value="false">Hide</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label>Resolution:</label>
+                                    <input type="number" id="resolution" min="0.1" max="2" step="0.1" value="1">
+                                </div>
+
+                                <div>
+                                    <label>Refreshment (ms):</label>
+                                    <input type="number" id="refreshment" min="100" max="60000" step="100" value="10000">
+                                </div>
+
+                                <div>
+                                    <label>View Time (sec):</label>
+                                    <input type="number" id="viewTime" min="3" max="10" step="1" value="5">
+                                </div>
+
+                                <div>
+                                    <label>Power Saving:</label>
+                                    <select id="powerSaving">
+                                        <option value="false" selected>Off</option>
+                                        <option value="true">On</option>
+                                    </select>
+                                </div>
+                                <div style="display: flex; align-content: center; flex-wrap: nowrap; justify-content: space-evenly; align-items: center; margin-top: 10px;">
+                                    <button type="button" id="applySettings">Apply</button>
+                                    <button onclick="location.reload();">Reload</button>
+                                    <button type="button" id="resetSettings">Reset</button>
+                                    <button type="button" id="closeModal-btn">close</button>
+                                </div>
+                            </form>
+                            <h2 id="save-rp" style="display: none;">Settings Applied!</h2>
                         </div>
                     </div>
                     <div class="tooltip" id="tooltip"></div>
-
-
                     <script>
-                        // Neon color palette
-                        const neonColors = ['#00FFFF', '#FF00FF', '#00FF00', '#FF4500', '#FFD700'];
-                    
-                    const markerSvg = `<svg viewBox="-4 0 36 36">
-                        <path fill="currentColor" d="M14,0 C21.732,0 28,5.641 28,12.6 C28,23.963 14,36 14,36 C14,36 0,24.064 0,12.6 C0,5.641 6.268,0 14,0 Z"></path>
-                        <circle fill="black" cx="14" cy="14" r="7"></circle>
-                    </svg>`;
-                    
-                        // Gen random data
-                        const N = 5;
-                        const arcsData = [...Array(N).keys()].map(() => ({
-                        startLat: (Math.random() - 0.5) * 180,
-                        startLng: (Math.random() - 0.5) * 360,
-                        endLat: (Math.random() - 0.5) * 180,
-                        endLng: (Math.random() - 0.5) * 360,
-                        color: [neonColors[Math.floor(Math.random() * neonColors.length)], neonColors[Math.floor(Math.random() * neonColors.length)]]
-                        }));
-                    
-                        // Extract marker data from arcsData (use start points of arcs)
-                        const markersData = arcsData.map(arc => ({
-                        lat: arc.startLat,
-                        lng: arc.startLng,
-                        color: arc.color[0] // Use the color of the arc start
-                        }));
-                    
-                    
-                    
-                    // Function to add generated data to the attack-list
-                    function addToAttackList(data, listId) {
-                    const attackList = document.getElementById(listId);
-                    
-                    data.forEach(item => {
-                        const attackList = document.getElementById('attack-list');
-                        const li = document.createElement('li');
-                        li.className = 'attack-card';
-                        li.innerHTML = `
-                        <div class="attack-header">
-                            <div class="attack-country">
-                            <img src="https://flagcdn.com/w320/us.png" alt="US"> US
-                            </div>
-                            <div class="attack-time">\${new Date().toLocaleTimeString()}</div>
-                            <div class="attack-type">GET</div>
-                        </div>
-                        <div class="attack-body">
-                            <div class="attack-ip">192.168.1.1</div>
-                            <div class="attack-time">»</div>
-                            <div class="attack-ip">192.168.1.100</div>
-                        </div>
-                        <div class="attack-footer">
-                            <div class="attack-device">
-                            <img src="device-icon.png" alt="Device">12345
-                            </div>
-                            <div class="attack-network">Wi-Fi</div>
-                        </div>
-                        `;
-                        attackList.prepend(li);
-                    });
-                    }
-                    // Function to add click event listener to attack-list items
-                    function setAttackDetailsOnClick(listId, detailsId) {
-                    const attackList = document.getElementById(listId);
-                    const detailsContent = document.getElementById(detailsId);
-                    
-                    // Delegate click event to the attack-list
-                    attackList.addEventListener('click', (event) => {
-                        const target = event.target.closest('li.attack-card'); // Select the closest attack-card li
-                        if (target) {
-                        const attackCountry = target.querySelector('.attack-country').textContent.trim();
-                        const attackTime = target.querySelector('.attack-time').textContent.trim();
-                        const attackType = target.querySelector('.attack-type').textContent.trim();
-                        const attackIpFrom = target.querySelector('.attack-body .attack-ip').textContent.trim();
-                        const attackIpTo = target.querySelector('.attack-body .attack-ip:nth-child(3)').textContent.trim();
-                        const attackDevice = target.querySelector('.attack-device').textContent.trim();
-                        const attackNetwork = target.querySelector('.attack-network').textContent.trim();
-                    
-                        // Construct the details content
-                        detailsContent.innerHTML = `
-                            <strong>Attack Details</strong><br>
-                            <strong>Country:</strong> \${attackCountry}<br>
-                            <strong>Time:</strong> \${attackTime}<br>
-                            <strong>Type:</strong> \${attackType}<br>
-                            <strong>Source IP:</strong> \${attackIpFrom}<br>
-                            <strong>Destination IP:</strong> \${attackIpTo}<br>
-                            <strong>Device ID:</strong> \${attackDevice}<br>
-                            <strong>Network Type:</strong> \${attackNetwork}
-                        `;
+                        // Default settings
+                        const defaultSettings = {
+                            animationMode: true,
+                            animationSpeed: 0.5,
+                            landmark: true,
+                            focusMode: true,
+                            ground: true,
+                            country: true,
+                            resolution: 1,
+                            refreshment: 10000, // ms
+                            viewTime: 5000, // ms
+                            powerSaving: false
+                        };
+
+                        // Power-saving settings
+                        const powerSaveSettings = {
+                            animationMode: false,
+                            animationSpeed: 0.0,
+                            landmark: false,
+                            focusMode: false,
+                            ground: false,
+                            country: false,
+                            resolution: 1,
+                            refreshment: 10000, // ms
+                            viewTime: 10000, // ms
+                            powerSaving: true
+                        };
+
+                        // Open and Close Modal Functions
+                        const settingsModal = document.getElementById("settingsModal");
+                        const gsetButton = document.getElementById("gset");
+                        const closeBtn = document.querySelector(".close-btn");
+
+                        // Open the modal when the "gset" button is clicked
+                        gsetButton.onclick = () => settingsModal.style.display = "block";
+
+                        // Close the modal when the close button is clicked
+                        closeBtn.onclick = () => settingsModal.style.display = "none";
+                        document.getElementById("closeModal-btn").onclick = () => settingsModal.style.display = "none";
+
+                        // Close the modal only when clicking outside the modal content
+                        window.onclick = (event) => {
+                            if (event.target === settingsModal) {
+                                settingsModal.style.display = "none";
+                            }
+                        };
+
+                        // Apply Settings and Store in Cookies
+                        document.getElementById("applySettings").onclick = () => {
+                            const settings = getCurrentSettings();
+                            document.cookie = `globeSettings=\${JSON.stringify(settings)}; path=/;`;
+
+                            //settingsModal.style.display = "none"; // Close the modal
+                            showConfirmationMessage();
+                            applyGlobeSettings(settings);
+                        };
+
+                        // **NEW** Reset settings to defaults
+                        document.getElementById("resetSettings").onclick = () => {
+                            applyGlobeSettings(defaultSettings);
+                            document.cookie = `globeSettings=\${JSON.stringify(defaultSettings)}; path=/;`;
+                            showConfirmationMessage("Settings reset to default.");
+                        };
+
+                        // Load Settings from Cookies
+                        function loadSettings() {
+                            const cookieData = document.cookie.split('; ').find(row => row.startsWith('globeSettings='));
+                            return cookieData ? JSON.parse(cookieData.split('=')[1]) : defaultSettings;
                         }
-                    });
-                    }
-                    
-                    // Adding arcsData to attack-list
-                    addToAttackList(arcsData, 'attack-list');
-                    
-                    // Call the function after attack-list is populated
-                    setAttackDetailsOnClick('attack-list', 'details-content');
-                    
-                    
-                    
-                    
-                    
+
+                        // Sync current settings from the form and return as an object
+                        function getCurrentSettings() {
+                            return {
+                                animationMode: document.getElementById("animationMode").value === "true",
+                                animationSpeed: parseFloat(document.getElementById("animationSpeed").value),
+                                landmark: document.getElementById("landmark").value === "true",
+                                focusMode: document.getElementById("focusMode").value === "true",
+                                ground: document.getElementById("ground").value === "true",
+                                country: document.getElementById("country").value === "true",
+                                resolution: parseFloat(document.getElementById("resolution").value),
+                                refreshment: parseInt(document.getElementById("refreshment").value), // ms
+                                viewTime: parseInt(document.getElementById("viewTime").value) * 1000, // sec to ms
+                                powerSaving: document.getElementById("powerSaving").value === "true"
+                            };
+                        }
+
+                        // Update form inputs based on current settings
+                        function applyGlobeSettings(settings) {
+                            document.getElementById("animationMode").value = settings.animationMode.toString();
+                            document.getElementById("animationSpeed").value = settings.animationSpeed;
+                            document.getElementById("landmark").value = settings.landmark.toString();
+                            document.getElementById("focusMode").value = settings.focusMode.toString();
+                            document.getElementById("ground").value = settings.ground.toString();
+                            document.getElementById("country").value = settings.country.toString();
+                            document.getElementById("resolution").value = settings.resolution;
+                            document.getElementById("refreshment").value = settings.refreshment;
+                            document.getElementById("viewTime").value = settings.viewTime / 1000; // ms to sec
+                            document.getElementById("powerSaving").value = settings.powerSaving.toString();
+
+                            togglePowerSaving(settings.powerSaving);
+                        }
+
+                        // Toggle the settings' inputs based on Power Saving mode
+                        function togglePowerSaving(isPowerSaving) {
+                            const inputs = document.querySelectorAll('#settingsForm input, #settingsForm select');
+                            inputs.forEach(input => {
+                                if (input.id !== 'powerSaving') {
+                                    input.disabled = isPowerSaving;
+                                }
+                            });
+                        }
+
+                        // Monitor Power Saving change
+                        document.getElementById("powerSaving").addEventListener("change", (event) => {
+                            if (event.target.value === true) {
+                                const isPowerSaving = event.target.value === "true";
+                                togglePowerSaving(isPowerSaving);
+                                applyGlobeSettings(isPowerSaving ? powerSaveSettings : loadSettings());
+                            } else {
+                                const isPowerSaving = event.target.value === "false";
+                                togglePowerSaving(isPowerSaving);
+                                applyGlobeSettings(isPowerSaving ? powerSaveSettings : loadSettings());
+                            }
+                        });
+
+                        // Show confirmation message after applying settings
+                        function showConfirmationMessage() {
+                            const settingsForm = document.getElementById("settingsForm");
+                            const confirmationMessage = document.getElementById("save-rp");
+
+                            settingsForm.style.display = "none";
+                            confirmationMessage.style.display = "block";
+
+                            // Show confirmation for 3-5 random seconds, then switch back
+                            const displayDuration = Math.floor(Math.random() * (5 - 3 + 1) + 3) * 1000;
+                            setTimeout(() => {
+                                confirmationMessage.style.display = "none";
+                                settingsForm.style.display = "block";
+                                settingsModal.style.display = "none"; // Close the modal
+                            }, displayDuration);
+                        }
+
+                        // Initial Load of Settings
+                        document.addEventListener("DOMContentLoaded", () => {
+                            const initialSettings = loadSettings();
+                            applyGlobeSettings(initialSettings);
+                        });
+
+
+
+                        // Function to get color by HTTP method
+                        function getColor(method) {
+                            const methodColors = {
+                                'GET': '#FF1493',
+                                'POST': '#0125d5',
+                                'PUT': '#1eb621',
+                                'PATCH': '#c4c420',
+                                'DELETE': '#ba0000',
+                                'HEAD': '#8A2BE2',
+                                'OPTIONS': '#21a9b7',
+                                'CUSTOM': '#FF6347'
+                            };
+
+                            return methodColors[method.toUpperCase()] || '#FF6347';
+                        }
+
+                        // Define fixed colors for client-side and host-side markers
+                        const clientColor = '#FF4500'; // Example: Client marker color (Orange)
+                        const hostColor = '#4682B4'; // Example: Host marker color (Steel Blue)
+
+                        const markerSvg = `<svg viewBox="-4 0 36 36">
+                                <path fill="currentColor" d="M14,0 C21.732,0 28,5.641 28,12.6 C28,23.963 14,36 14,36 C14,36 0,24.064 0,12.6 C0,5.641 6.268,0 14,0 Z"></path>
+                                <circle fill="black" cx="14" cy="14" r="7"></circle>
+                            </svg>`;
+
                         const map = Globe()
                             .globeImageUrl('//unpkg.com/three-globe@2.31.1/example/img/earth-night.jpg')
                             .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
                             .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
-                            .arcsData(arcsData)
                             .arcColor('color')
                             .arcStroke(0.8)
                             .arcDashLength(0.6)
                             .arcDashGap(0.05)
                             .arcDashAnimateTime(() => Math.random() * 4000 + 200)
-                    
-                            // Add markers
-                            .htmlElementsData(markersData)
-                            .htmlElement(marker => {
-                                const el = document.createElement('div');
-                                el.innerHTML = markerSvg;
-                                el.style.color = marker.color;
-                                el.style.width = '16px';  // Adjust marker size
-                                el.className = 'marker';
-                    
-                                el.style['pointer-events'] = 'auto';
-                                el.style.cursor = 'pointer';
-                                el.onclick = () => {
-                                    // console.info('Clicked marker at', marker.lat, marker.lng);
-                                    document.getElementById('attack-info').textContent = `Clicked marker at Lat: \${marker.lat}, Lng: \${marker.lng}`;
-                                    document.getElementById('attack-list').innerHTML += `<li>Attack at Lat: \${marker.lat}, Lng: \${marker.lng}</li>`;
-                    
-                                };
-                                // Tooltip functionality
-                                el.onmouseover = () => {
-                                showTooltip(marker.lat, marker.lng, el);
-                                };
-                                el.onmouseout = () => {
-                                hideTooltip();
-                                };
-                                return el;
-                            })
-                        (document.getElementById('map'));
-                    
-                    
-                        // Polygons
-                        fetch('https://globe.gl/example/datasets/ne_110m_admin_0_countries.geojson')
-                        .then(res => res.json())
-                        .then(countries => {
-                            map
-                            .polygonsData(countries.features)
-                            .polygonCapColor(() => '#191d1b')
-                            .polygonSideColor(() => '#010f23')
-                            .polygonStrokeColor(() => '#010f23')
-                            .polygonAltitude(0.02);
-                        });
-                        
-                    
-                        // Label
-                        fetch('https://globe.gl/example/datasets/ne_110m_populated_places_simple.geojson')
-                        .then(res => res.json())
-                        .then(places => {
-                            map
-                            .labelsData(places.features)
-                            .labelLat(d => d.properties.latitude)
-                            .labelLng(d => d.properties.longitude)
-                            .labelText(d => d.properties.name)
-                            .labelSize(1)
-                            .labelColor(() => 'rgba(255, 165, 0, 0.75)')
-                            .labelResolution(1)
-                            .labelAltitude(0.02);
-                        });
-                    
+                            .arcStartLat('startLat')
+                            .arcStartLng('startLng')
+                            .arcEndLat('endLat')
+                            .arcEndLng('endLng')
+                            (document.getElementById('map'));
+
+
+
+
+                        if (loadSettings()['ground'] === true) {
+                            // Polygons
+                            fetch('https://globe.gl/example/datasets/ne_110m_admin_0_countries.geojson')
+                            .then(res => res.json())
+                            .then(countries => {
+                                map
+                                    .polygonsData(countries.features)
+                                    .polygonCapColor(() => '#191d1b')
+                                    .polygonSideColor(() => '#010f23')
+                                    .polygonStrokeColor(() => '#010f23')
+                                    .polygonAltitude(0.02);
+                            });
+                        }
+
+                        if (loadSettings()['country'] === true) {
+                            // Label
+                            fetch('https://globe.gl/example/datasets/ne_110m_populated_places_simple.geojson')
+                            .then(res => res.json())
+                            .then(places => {
+                                map
+                                    .labelsData(places.features)
+                                    .labelLat(d => d.properties.latitude)
+                                    .labelLng(d => d.properties.longitude)
+                                    .labelText(d => d.properties.name)
+                                    .labelSize(1)
+                                    .labelColor(() => 'rgba(255, 165, 0, 0.75)')
+                                    .labelResolution(1)
+                                    .labelAltitude(0.02);
+                            });
+                        }
+
                         // Control the zoom (min and max distance)
                         const controls = map.controls();
                         controls.minDistance = 250;
                         controls.maxDistance = 450;
-                    
-                        // Animate the globe background
-                        //   map.controls().autoRotate = true;
-                        //   map.controls().autoRotateSpeed = 1;
-                    
-                    
-                        map.renderer().setPixelRatio(window.devicePixelRatio / 1); // Reduce resolution
-                        // Optionally disable auto-rotate if enabled
-                        map.controls().autoRotate = false;
-                    
-                    
-                    
-                        // Tooltip for marker info
-                        const tooltip = document.createElement('div');
-                        tooltip.className = 'tooltip';
-                        document.body.appendChild(tooltip);
-                    
-                        function showTooltip(lat, lng, marker) {
-                        tooltip.textContent = `Lat: \${lat.toFixed(2)}, Lng: \${lng.toFixed(2)}`;
-                        tooltip.style.display = 'block';
-                        tooltip.style.left = `\${marker.getBoundingClientRect().left + window.scrollX + 20}px`;
-                        tooltip.style.top = `\${marker.getBoundingClientRect().top + window.scrollY - 30}px`;
+
+                        //map.renderer().setPixelRatio(window.devicePixelRatio / 1); // Reduce resolution
+
+
+                        // Fetch attack data
+                        async function fetchAttackData() {
+                            try {
+                                const response = await fetch(window.location.href, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    }
+                                });
+                                const data = await response.json();
+                                processAttackData(data);
+                            } catch (error) {
+                                console.error('Error fetching attack data:', error);
+                            }
                         }
-                    
+
+
+
+                        // Store processed attack data for comparison
+                        const processedAttacks = new Map();
+
+                        // Calculate center point between host and client markers
+                        function getMidpoint(lat1, lng1, lat2, lng2) {
+                            // console.log([lat1, lng1, lat2, lng2]);
+
+                            // Convert degrees to radians
+                            const toRadians = deg => deg * Math.PI / 180;
+                            const toDegrees = rad => rad * 180 / Math.PI;
+
+                            // Latitude and longitude in radians
+                            const lat1Rad = toRadians(lat1);
+                            const lat2Rad = toRadians(lat2);
+                            const lng1Rad = toRadians(lng1);
+                            const lng2Rad = toRadians(lng2);
+
+                            // Calculate the midpoint latitude and longitude
+                            const dLng = lng2Rad - lng1Rad;
+
+                            // Calculate Bx and By using spherical trigonometry
+                            const Bx = Math.cos(lat2Rad) * Math.cos(dLng);
+                            const By = Math.cos(lat2Rad) * Math.sin(dLng);
+
+                            // Calculate the midpoint latitude and longitude in radians
+                            const midLatRad = Math.atan2(
+                                Math.sin(lat1Rad) + Math.sin(lat2Rad),
+                                Math.sqrt((Math.cos(lat1Rad) + Bx) * (Math.cos(lat1Rad) + Bx) + By * By)
+                            );
+
+                            const midLngRad = lng1Rad + Math.atan2(By, Math.cos(lat1Rad) + Bx);
+
+                            // Convert back to degrees
+                            const midLat = toDegrees(midLatRad);
+                            let midLng = toDegrees(midLngRad);
+
+                            // Normalize the longitude to be within -180° to 180°
+                            if (midLng > 180) {
+                                midLng -= 360;
+                            } else if (midLng < -180) {
+                                midLng += 360;
+                            }
+
+                            // console.log({ lat: midLat, lng: midLng });
+
+                            // Return the calculated midpoint
+                            return {
+                                lat: midLat,
+                                lng: midLng
+                            };
+                        }
+
+
+
+                        // Process and display attack data
+                        function processAttackData(data) {
+                            const newAttacks = data.filter(attack => !processedAttacks.has(`\${attack.clientLat}-\${attack.clientLon}-\${attack.requestFLOAT}`));
+                            
+                            if (newAttacks.length > 0) {
+                                newAttacks.forEach(attack => processedAttacks.set(`\${attack.clientLat}-\${attack.clientLon}-\${attack.requestFLOAT}`, attack)); // Add new attacks
+
+                                // Separate client and host markers for NEW attacks only
+                                const markersData = newAttacks.flatMap(item => [{
+                                        lat: item.clientLat,
+                                        lng: item.clientLon,
+                                        color: clientColor,
+                                        role: 'client',
+                                        type: item.requestMETHOD
+                                    },
+                                    {
+                                        lat: item.hostLatitude,
+                                        lng: item.hostLongitude,
+                                        color: hostColor,
+                                        role: 'host',
+                                        type: item.requestMETHOD
+                                    }
+                                ]);
+
+                                const arcsData = newAttacks.map(item => ({
+                                    startLat: item.clientLat,
+                                    startLng: item.clientLon,
+                                    endLat: item.hostLatitude, // server as the endpoint
+                                    endLng: item.hostLongitude,
+                                    color: getColor(item.requestMETHOD)
+                                }));
+
+
+
+
+                                // Add new attack markers and arcs to the map
+                                map.htmlElementsData(map.htmlElementsData().concat(markersData)).htmlElement(marker => {
+                                    const el = document.createElement('div');
+                                    el.innerHTML = markerSvg;
+                                    el.style.color = marker.color;
+                                    el.style.width = '16px'; // Adjust marker size
+                                    el.className = 'marker';
+                                    el.title = `\${marker.role.toUpperCase()}`;
+                                    el.style['pointer-events'] = 'auto';
+                                    el.style.cursor = 'pointer';
+                                    el.onclick = () => {
+                                        // document.getElementById('attack-info').textContent = `Clicked \${marker.role} marker at Lat: \${marker.lat}, Lng: \${marker.lng}`;
+                                    };
+
+                                    // Tooltip functionality
+                                    el.onmouseover = () => {
+                                        showTooltip(marker.lat, marker.lng, el);
+                                    };
+                                    el.onmouseout = () => {
+                                        hideTooltip();
+                                    };
+                                    return el;
+                                });
+
+
+                                map.arcsData(map.arcsData().concat(arcsData)); // Add new arcs
+
+                                addToAttackList(newAttacks); // Add only new attacks to the list
+
+
+                                // Calculate center point between the first client attack and server (host)
+                                const {
+                                    lat: centerLat,
+                                    lng: centerLng
+                                } = getMidpoint(
+                                    newAttacks[0].clientLat,
+                                    newAttacks[0].clientLon,
+                                    newAttacks[0].hostLatitude,
+                                    newAttacks[0].hostLongitude
+                                );
+
+                                // Immediately center and auto-rotate the map on the new attack point
+                                map.pointOfView({
+                                    lat: centerLat,
+                                    lng: centerLng
+                                }, 1000);
+
+                                pauseAnimation(); // Disable rotation for cleanup
+
+                                const detailsContent = document.getElementById("details-content");
+                                const makeUnselectButton = document.getElementById("makeUnselect");
+                                const contentLength = detailsContent.textContent.length;
+
+                                if ((contentLength < 50) || (contentLength >= 50 && !makeUnselectButton.hasAttribute("data"))) {
+                                    let details = newAttacks[0];
+                                    let formattedHTML = "";
+
+                                    for (const [key, value] of Object.entries(details)) {
+                                        formattedHTML += `<strong>\${key}</strong>: \${value}<br>`;
+                                    }
+                                    formattedHTML += '<button id="makeUnselect" data="auto" onclick="makeUnselect()">Clear Details</button>';
+
+                                    detailsContent.innerHTML = formattedHTML;
+                                }
+
+                                // console.log(loadSettings());
+                                
+
+                                // Remove client markers and arcs after 5 seconds
+                                setTimeout(() => {
+                                    pauseAnimation(); // Disable rotation for cleanup
+
+                                    const markersToRemove = newAttacks.map(attack => `\${attack.clientLat}-\${attack.clientLon}`);
+
+                                    // Remove markers for host and client
+                                    const updatedMarkers = map.htmlElementsData().filter(marker =>
+                                        marker.role === 'host' || !markersToRemove.includes(`\${marker.lat}-\${marker.lng}`)
+                                    );
+                                    map.htmlElementsData(updatedMarkers);
+
+                                    // Remove arcs associated with the new attacks
+                                    const updatedArcs = map.arcsData().filter(arc =>
+                                        !newAttacks.some(attack =>
+                                            arc.startLat === attack.clientLat && arc.startLng === attack.clientLon
+                                        )
+                                    );
+
+                                    map.arcsData(updatedArcs);
+
+                                    // Enable auto-rotation again after cleanup
+                                    resumeAnimation(); // Enable auto-rotation
+
+                                    if ((contentLength < 50) || (contentLength >= 50 && makeUnselectButton.hasAttribute("data"))) {
+                                        document.getElementById("details-content").innerHTML = "Select a request to view details.";
+                                    }
+
+                                    map.pointOfView({ lat: 0, lng: 0}, 1000);
+                                }, loadSettings()['viewTime']);
+                            } else {
+                                // If no new attacks, just update the attack list
+                                addToAttackList([]);
+                                resumeAnimation(); // Enable auto-rotation
+                            }
+                        }
+
+
+                        function addToAttackList(data) {
+                            const attackList = document.getElementById('attack-list');
+                            const maxItems = 100; // Define the maximum number of items allowed in the list
+
+                            // Create a Map to keep track of unique entries by their unique keys
+                            const existingEntries = new Map();
+
+                            // Loop through the current items in the attack list to populate the Map
+                            attackList.querySelectorAll('li.attack-card').forEach(item => {
+                                const requestTime = item.querySelector('.attack-time').textContent.trim();
+                                const requestMethod = item.querySelector('.attack-type').textContent.trim(); // Mapped from requestMETHOD
+                                const privateIp = item.querySelector('.attack-body .attack-ip').textContent.trim();
+                                const publicIp = item.querySelector('.attack-body .attack-ip:nth-child(3)').textContent.trim(); // Adjust if not correct
+                                const netkey = item.dataset.netkey; // Assuming this is stored as a data attribute
+                                const devicekey = item.dataset.devicekey; // Assuming this is stored as a data attribute
+
+                                const entryKey = `\${requestTime}-\${requestMethod}-\${privateIp}-\${publicIp}-\${netkey}-\${devicekey}`;
+                                existingEntries.set(entryKey, item);
+                            });
+
+                            // Add or update entries based on the new data received
+                            data.forEach(item => {
+                                const requestTime = new Date(item.requestTime * 1000).toLocaleTimeString();
+                                const requestFLOAT = item.requestFLOAT ? parseFloat(item.requestFLOAT).toFixed(2) : '';
+                                
+                                const entryKey = `\${requestTime}-\${requestFLOAT}-\${item.requestMETHOD}-\${item.hostPublicIP}-\${item.clientPublicIP}-\${item.netkey}-\${item.devicekey}`;
+
+                                if (existingEntries.has(entryKey)) {
+                                    const existingItem = existingEntries.get(entryKey);
+                                    attackList.prepend(existingItem); // Move the existing item to the top
+                                } else {
+                                    let connection = '»';
+
+                                    function isValidIP(ip) {
+                                        const ipRegex = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+                                        return ipRegex.test(ip);
+                                    }
+
+                                    function ipInRange(ip1, ip2) {
+                                        // Extract the first three octets to check for matching ranges (Class C network)
+                                        const range1 = ip1.split('.').slice(0, 3).join('.');
+                                        const range2 = ip2.split('.').slice(0, 3).join('.');
+                                        return range1 === range2;
+                                    }
+
+                                    // Check conditions and update connection value
+                                    if (ipInRange(item.clientPrivateIP, item.hostPrivateIP) && item.clientPublicIP === item.hostPublicIP) {
+                                        connection = '« local »';
+                                    } else if (!ipInRange(item.clientPrivateIP, item.hostPrivateIP) && item.clientPublicIP != item.hostPublicIP && item.clientVpn === 'false') {
+                                        connection = '« remote »';
+                                    } else if (ipInRange(item.clientPrivateIP, item.hostPrivateIP) && item.clientPublicIP === item.hostPublicIP && item.clientVpn === 'true' && item.hostVpn === 'true') {
+                                        connection = '« local|vpn »';
+                                    } else if (item.clientPublicIP !== item.hostPublicIP && item.clientVpn === 'true') {
+                                        connection = '« vpn »';
+                                    } else {
+                                        connection = '»';
+                                    }
+                                    
+                                    const li = document.createElement('li');
+                                    li.className = 'attack-card';
+                                    li.dataset.netkey = item.netkey;
+                                    li.dataset.devicekey = item.devicekey;
+                                    li.dataset.requesttime = item.requestTime; // Store requestTIME as a data attribute
+                                    li.dataset.requestFLOAT = item.requestFLOAT; // Store requestFLOAT as a data attribute
+                                    li.dataset.data = encodeObjectToBase64(item); // Store requestFLOAT as a data attribute
+                                    li.innerHTML = `
+                                        <div class="attack-header">
+                                            <div class="attack-country" tooltipData="\${item.clientCountry}">
+                                                <img src="https://flagcdn.com/w320/\${item.clientCountryCode.toLowerCase()}.png" alt="\${item.clientCountry}">\${item.clientCountryCode}
+                                            </div>
+                                            <div class="attack-time">\${requestTime}</div>
+                                            <div class="attack-type" style="background-color:\${getColor(item.requestMETHOD)};">\${item.requestMETHOD}</div>
+                                        </div>
+                                        <div class="attack-body">
+                                            <div class="attack-ip">\${(isValidIP(item.clientPublicIP) && item.clientPublicIP.length <= 16) ? item.clientPublicIP : item.clientPrivateIP}</div>
+                                            <div class="attack-time">\${connection}</div>
+                                            <div class="attack-ip">\${item.hostPublicIP}</div>
+                                        </div>
+                                        <div class="attack-body">
+                                            <div class="attack-time">\${item.requestMETHOD} »»</div>
+                                            <div class="attack-time">\${item.requestURL}</div>
+                                        </div>
+                                        <div class="attack-footer">
+                                            <div class="attack-device">\${item.clientPlatform}</div>
+                                            <div class="attack-time">« \${item.clientFingerprintId} »</div>
+                                            <div class="attack-network">\${item.clientBrowser}</div>
+                                        </div>
+                                    `;
+
+                                    attackList.prepend(li);
+                                    existingEntries.set(entryKey, li);
+                                }
+                            });
+
+                            // Manage list length by removing excess items
+                            while (attackList.children.length > maxItems) {
+                                attackList.removeChild(attackList.lastChild);
+                            }
+
+                            // Optional: Realign or sort the list based on the time and requestFLOAT if necessary
+                            realignAttackList(attackList);
+                        }
+
+
+                        // Function to realign the attack list based on requestTIME, requestFLOAT, and datetime
+                        function realignAttackList(attackList) {
+                            const itemsArray = Array.from(attackList.children);
+
+                            // Sort items by requestTIME and requestFLOAT (if available)
+                            itemsArray.sort((a, b) => {
+                                const timeA = parseInt(a.dataset.requesttime || a.querySelector('.attack-time').textContent.trim(), 10);
+                                const timeB = parseInt(b.dataset.requesttime || b.querySelector('.attack-time').textContent.trim(), 10);
+                                
+                                const floatA = parseFloat(a.dataset.requestfloat || 0);
+                                const floatB = parseFloat(b.dataset.requestfloat || 0);
+
+                                // Sort by requestTIME (descending), then by requestFLOAT (descending)
+                                return (timeB - timeA) || (floatB - floatA);
+                            });
+
+                            // Re-append items in the sorted order
+                            itemsArray.forEach(item => attackList.appendChild(item));
+                        }
+
+
+                        // Function to add click event listener to attack-list items
+                        function setAttackDetailsOnClick(listId, detailsId) {
+                            const attackList = document.getElementById(listId);
+                            const detailsContent = document.getElementById(detailsId);
+
+                            // Delegate click event to the attack-list
+                            attackList.addEventListener('click', (event) => {
+                                const target = event.target.closest('li.attack-card'); // Select the closest attack-card li
+                                if (target) {
+                                    const attackCountry = target.querySelector('.attack-country').textContent.trim();
+                                    const attackTime = target.querySelector('.attack-time').textContent.trim();
+                                    const attackType = target.querySelector('.attack-type').textContent.trim();
+                                    const attackIpFrom = target.querySelector('.attack-body .attack-ip').textContent.trim();
+                                    const attackIpTo = target.querySelector('.attack-body .attack-ip:nth-child(3)').textContent.trim();
+                                    const attackDevice = target.querySelector('.attack-device').textContent.trim();
+                                    const attackNetwork = target.querySelector('.attack-network').textContent.trim();
+
+                                    const decoded = decodeBase64ToObject(target.getAttribute('data-data'));
+
+                                    // Construct the details content
+                                    const detailsContent = document.getElementById("details-content");
+                                    let formattedHTML = "";
+                                    for (const [key, value] of Object.entries(decoded)) {
+                                        formattedHTML += `<strong>\${key}</strong>: \${value}<br>`;
+                                    }
+                                    formattedHTML += '<button id="makeUnselect" onclick="makeUnselect()">Clear Details</button>';
+                                    detailsContent.innerHTML = formattedHTML;
+                                
+                                }
+                            });
+                        }
+
+
+
+                        // Clear any content inside #details-content and set default text
+                        function makeUnselect() {
+                            document.getElementById("details-content").innerHTML = "Select a request to view details.";
+                        }
+
+                        // Tooltip functions
+                        function showTooltip(lat, lng, el) {
+                            const tooltip = document.getElementById('tooltip');
+                            tooltip.textContent = `Lat: \${lat}, Lng: \${lng}`;
+                            tooltip.style.display = 'block';
+                            tooltip.style.top = `\${el.getBoundingClientRect().top}px`;
+                            tooltip.style.left = `\${el.getBoundingClientRect().left + el.clientWidth}px`;
+                        }
+
                         function hideTooltip() {
-                        tooltip.style.display = 'none';
+                            const tooltip = document.getElementById('tooltip');
+                            tooltip.style.display = 'none';
                         }
-                    
-                    
+
                         // Define pause and resume animation functions
                         function pauseAnimation() {
-                            map.controls().autoRotate = false;  // Disable auto-rotate if enabled
-                            // console.log("Animation paused");
+                            map.controls().autoRotate = false; // Disable auto-rotate if enabled
+                            map.controls().autoRotateSpeed = 0; // Set your desired rotation speed
                         }
-                    
+
                         function resumeAnimation() {
-                            map.controls().autoRotate = true;  // Enable auto-rotate when the page is visible again
-                            map.controls().autoRotateSpeed = 1;  // Set your desired rotation speed
-                            // console.log("Animation resumed");
+                            map.controls().autoRotate = loadSettings()['animationMode']; // Enable auto-rotate when the page is visible again
+                            map.controls().autoRotateSpeed = loadSettings()['animationSpeed']; // Set your desired rotation speed
                         }
-                    
-                        // Listen for visibility change events
-                        document.addEventListener('visibilitychange', () => {
-                            if (document.hidden) {
-                                pauseAnimation();  // Pause animation when the page is hidden
-                            } else {
-                                resumeAnimation();  // Resume animation when the page is visible again
-                            }
-                        });
-                    
-                        // Handle page unload/close events
-                        window.addEventListener('beforeunload', pauseAnimation);
-                        window.addEventListener('unload', pauseAnimation);
-                    
-                        // Pause animation when the tab is minimized or the window loses focus
-                        window.addEventListener('blur', pauseAnimation);
-                        // Resume animation when the tab is focused again
-                        window.addEventListener('focus', resumeAnimation);
+
+                        // Function to initialize tooltips for elements with tooltipData attribute
+                        function initializeTooltips() {
+                            // Select all elements with tooltipData attribute
+                            const tooltipElements = document.querySelectorAll('[tooltipData]');
+
+                            tooltipElements.forEach(el => {
+                                el.addEventListener('mouseover', () => {
+                                    const tooltipData = el.getAttribute('tooltipData'); // Get the tooltip data
+                                    showTooltip(tooltipData, el); // Show the tooltip with the data
+                                });
+
+                                el.addEventListener('mouseout', hideTooltip); // Hide the tooltip on mouse out
+                            });
+                        }
+
+
+
+                        // Function to handle visibility change and window events
+                        function handleAutoRotation() {
+                            if (eventListenersSet) return; // Skip if listeners are already set
+
+                            // Set event listeners for various events
+                            document.addEventListener("visibilitychange", () => {
+                                if (document.hidden) {
+                                    pauseAnimation();
+                                } else {
+                                    resumeAnimation();
+                                }
+                            });
+
+                            window.addEventListener("beforeunload", () => {
+                                pauseAnimation();
+                            });
+
+                            window.addEventListener("unload", () => {
+                                pauseAnimation();
+                            });
+
+                            window.addEventListener("blur", () => {
+                                pauseAnimation();
+                            });
+
+                            window.addEventListener("focus", () => {
+                                resumeAnimation();
+                            });
+                        }
+
+
+                        // Initialize the fetch process and set the attack details click event
+                        fetchAttackData();
+                        setInterval(fetchAttackData, loadSettings()['refreshment']); // Refresh every 5 seconds
+                        setAttackDetailsOnClick('attack-list', 'details-content');
+                        // Call this function after your DOM content is loaded
+                        document.addEventListener('DOMContentLoaded', initializeTooltips);
                     </script>
                 </body>
-
                 </html>
                 EOT;
         });
