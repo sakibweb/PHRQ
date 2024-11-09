@@ -20,39 +20,44 @@ class PHRQ {
     public static function php($method, $url, $headers = [], $body = null, $options = []) {
         try {
             $ch = curl_init($url);
-
+    
             if ($ch === false) {
                 throw new Exception('Failed to initialize cURL');
             }
-
+    
             curl_setopt($ch, CURLOPT_URL, $url);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
-
+    
             if (!empty($headers)) {
                 curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
             }
-
+    
             if ($body !== null && !empty($body)) {
                 if (is_array($body)) {
                     $body = json_encode($body);
                 }
                 curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
             }
-
+    
+            if (isset($options['ssl']) && $options['ssl'] === false) {
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            }
+    
             foreach ($options as $key => $value) {
                 if (defined($key)) {
                     curl_setopt($ch, constant($key), $value);
                 }
             }
-
+    
             $response = curl_exec($ch);
             if ($response === false) {
                 throw new Exception(curl_error($ch));
             }
-
+    
             curl_close($ch);
-
+    
             $decoded_response = json_decode($response, true);
             if (json_last_error() === JSON_ERROR_NONE) {
                 return $decoded_response;
@@ -124,12 +129,44 @@ JS;
      */
     public static function header($method = 'GET', $origin = '*', $contentType = 'application/json', $additionalHeaders = []) {
         header('Content-Type: '.$contentType);
+        $headers = '*';
+        if ($method === 'auto') {
+            $method =  $_SERVER['REQUEST_METHOD'];
+        }
+        if ($method === 'POST') {
+            $method = 'POST, OPTIONS';
+            $headers = 'Content-Type, Authorization';
+        }
+        if ($method === 'POST' && $_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+            header('Access-Control-Allow-Credentials: true');
+            self::status();
+            exit(0);
+        }
         header("Access-Control-Allow-Methods: $method");
         header("Access-Control-Allow-Origin: $origin");
-        header("Access-Control-Allow-Headers: *");
-        
+        header("Access-Control-Allow-Headers: ".$headers);
+        header('Access-Control-Max-Age: 86400');
         foreach ($additionalHeaders as $key => $value) {
             header("$key: $value");
+        }
+    }
+
+    
+    /**
+     * Enable or disable CORS for API responses.
+     *
+     * @param bool $enable True to enable CORS, false to disable.
+     * @param string $origin CORS origin (default is '*').
+     */
+    public static function cross($enable = true, $origin = '*') {
+        if ($enable) {
+            header("Access-Control-Allow-Origin: *");
+            header("Access-Control-Allow-Methods: *");
+            header("Access-Control-Allow-Headers: Content-Type, Authorization");
+            if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+                header("Access-Control-Allow-Credentials: true");
+                exit(0);
+            }
         }
     }
 
@@ -2060,5 +2097,4 @@ JS;
         }
     }
 }
-
 ?>
